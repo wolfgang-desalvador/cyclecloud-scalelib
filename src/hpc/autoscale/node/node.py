@@ -463,7 +463,8 @@ class Node(ABC):
         )
         ret.available.update(deepcopy(self.available))
         ret.metadata.update(deepcopy(self.metadata))
-
+        ret.__closed = deepcopy(self.closed)
+        
         if not self.exists:
             ret.node_attribute_overrides.update(deepcopy(self.node_attribute_overrides))
 
@@ -597,6 +598,7 @@ class Node(ABC):
         self.required = self.required or snode.required or bool(snode.assignments)
         self.__assignments.update(snode.assignments)
         self.metadata.update(deepcopy(snode.metadata))
+        self.__closed = deepcopy(snode.closed)
 
     def shellify(self) -> None:
         from hpc.autoscale.clilib import ShellDict
