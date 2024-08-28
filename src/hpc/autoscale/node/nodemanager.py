@@ -105,6 +105,37 @@ class NodeManager:
     def _add_bucket(self, bucket: NodeBucket) -> None:
         self.__node_buckets.append(bucket)
 
+    def allocate_fixed_demand(self, nodearray, vm_size, placement_group, minimumNumber):       
+        newNodes = []
+        for bucket in self.get_buckets():
+            newBucketNodes = []
+            if bucket.nodearray == nodearray and bucket.vm_size == vm_size and bucket.placement_group == placement_group:
+                for _ in range(min(bucket.available_count, minimumNumber - len(bucket.nodes))):
+                    node_name = self._next_node_name(bucket)
+                    new_node = node_from_bucket(
+                        bucket,
+                        exists=False,
+                        state=ht.NodeStatus("Off"),
+                        target_state=ht.NodeStatus("Off"),
+                        power_state=ht.NodeStatus("Off"),
+                        placement_group=bucket.placement_group,
+                        new_node_name=node_name,
+                    )
+                    self._apply_defaults(new_node)
+                    newBucketNodes.append((new_node, new_node))
+                    
+                self._commit(bucket, newBucketNodes)
+                newNodes += newBucketNodes
+        return newNodes
+    
+    def get_nodes_in_bucket(self, nodearray, vm_size, placement_group):
+
+        nodes = []
+        for bucket in self.get_buckets():
+            if bucket.nodearray == nodearray and bucket.vm_size == vm_size and bucket.placement_group == placement_group:
+                nodes += bucket.nodes
+        return nodes
+    
     @apitrace
     def allocate(
         self,

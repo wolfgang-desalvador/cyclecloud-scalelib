@@ -183,6 +183,20 @@ class DemandCalculator:
 
         return None
 
+
+    def allocate_fixed_demand(self, config):
+        fixed_demand_config = config.get("fixed_demand", [])
+
+        for fixed_demand_request in fixed_demand_config:
+            newNodes = self.node_mgr.allocate_fixed_demand(
+                fixed_demand_request['nodearray'], 
+                fixed_demand_request['vm_size'], 
+                fixed_demand_request['placement_group'], 
+                fixed_demand_request['min_nodes']
+                )
+            for node, _ in newNodes:
+                self.__scheduler_nodes_queue.push(node)
+
     def get_compute_nodes(self) -> List[Node]:
         return list(self.__scheduler_nodes_queue)
 
@@ -242,6 +256,34 @@ class DemandCalculator:
                     continue
                 ret.append(node)
         return ret
+    
+    def check_minimum_nodes(
+            self, 
+            config,
+            unmatched_nodes
+    ):
+        fixed_demand_config = config.get("fixed_demand", [])
+
+        for fixed_demand_request in fixed_demand_config:
+            current_nodes_in_bucket = self.node_mgr.get_nodes_in_bucket(
+                fixed_demand_request['nodearray'],
+                fixed_demand_request['vm_size'],
+                fixed_demand_request['placement_group']
+            )
+            target_nodes_to_deallocate = [
+                node for node in unmatched_nodes
+                if node.nodearray == fixed_demand_request['nodearray'] and
+                node.vm_size == fixed_demand_request['vm_size'] and
+                node.placement_group == fixed_demand_request['placement_group'] 
+                ] 
+            logging.debug(f"Plan to deallocate {len(target_nodes_to_deallocate)} nodes")
+            logging.debug(f"Current nodes {len(current_nodes_in_bucket)} in bucket")
+            while len(current_nodes_in_bucket) - len(target_nodes_to_deallocate) < fixed_demand_request['min_nodes'] and target_nodes_to_deallocate:
+                nodeToExclude = target_nodes_to_deallocate.pop()
+                logging.debug(f"Excluding {nodeToExclude} to satisfy minimum demand")
+                unmatched_nodes.remove(nodeToExclude)
+
+        return unmatched_nodes
 
     @apitrace
     def find_booting(

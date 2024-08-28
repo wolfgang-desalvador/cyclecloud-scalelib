@@ -404,6 +404,8 @@ class CommonCLI(ABC):
             logging.info("Adding %s", job)
             dcalc.add_job(job)
 
+        dcalc.allocate_fixed_demand(config)
+
         demand = dcalc.get_demand()
         logging.info(
             "Done calculating demand. %s new nodes, %s unmatched nodes, %s nodes total",
@@ -514,9 +516,9 @@ class CommonCLI(ABC):
         def booting_at_least(node: Node) -> float:
             return parse_boot_timeout(config, node)
 
-        unmatched_for_5_mins = demand_calculator.find_unmatched_for(
+        unmatched_for_5_mins = demand_calculator.check_minimum_nodes(config, demand_calculator.find_unmatched_for(
             at_least=idle_at_least
-        )
+        ))
         timed_out_booting = demand_calculator.find_booting(at_least=booting_at_least)
 
         # I don't care about nodes that have keep_alive=true
