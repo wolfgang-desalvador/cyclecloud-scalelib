@@ -105,37 +105,52 @@ class NodeManager:
     def _add_bucket(self, bucket: NodeBucket) -> None:
         self.__node_buckets.append(bucket)
 
-    def allocate_fixed_demand(self, nodearray, vm_size, placement_group, minimumNumber):       
+
+    def allocate_fixed_demand(self, nodearray, vm_size, placement_group, minimumNumber, colocated=True):       
         newNodes = []
-        for bucket in self.get_buckets():
+        candidateBuckets = sorted(
+            self.get_buckets_by_properties(nodearray, vm_size, placement_group, colocated), 
+            key=lambda bucket: len(bucket.nodes), reverse=True
+        )
+
+        def calculateOverallNodes(candidateBuckets):
+            return sum([len(b.nodes) for b in candidateBuckets])
+        
+
+        
+        for bucket in candidateBuckets:
             newBucketNodes = []
-            if bucket.nodearray == nodearray and bucket.vm_size == vm_size and bucket.placement_group == placement_group:
-                for _ in range(min(bucket.available_count, minimumNumber - len(bucket.nodes))):
-                    node_name = self._next_node_name(bucket)
-                    new_node = node_from_bucket(
-                        bucket,
-                        exists=False,
-                        state=ht.NodeStatus("Off"),
-                        target_state=ht.NodeStatus("Off"),
-                        power_state=ht.NodeStatus("Off"),
-                        placement_group=bucket.placement_group,
-                        new_node_name=node_name,
-                    )
-                    self._apply_defaults(new_node)
-                    newBucketNodes.append((new_node, new_node))
-                    
-                self._commit(bucket, newBucketNodes)
-                newNodes += newBucketNodes
+            while calculateOverallNodes(candidateBuckets) < minimumNumber and bucket.available_count > 0:
+                node_name = self._next_node_name(bucket)
+                new_node = node_from_bucket(
+                    bucket,
+                    exists=False,
+                    state=ht.NodeStatus("Off"),
+                    target_state=ht.NodeStatus("Off"),
+                    power_state=ht.NodeStatus("Off"),
+                    placement_group=bucket.placement_group,
+                    new_node_name=node_name,
+                )
+                self._apply_defaults(new_node)
+                newBucketNodes.append((new_node, new_node))
+                bucket.decrement()
+                self._commit(bucket, newBucketNodes[-1:])
+                logging.debug(bucket.available_count)
+            newNodes += newBucketNodes
+
         return newNodes
     
-    def get_nodes_in_bucket(self, nodearray, vm_size, placement_group):
-
-        nodes = []
-        for bucket in self.get_buckets():
-            if bucket.nodearray == nodearray and bucket.vm_size == vm_size and bucket.placement_group == placement_group:
-                nodes += bucket.nodes
+    def get_nodes_in_bucket(self, nodearray, vm_size, placement_group, colocated=True):
+        
+        candidateBuckets = sorted(
+            self.get_buckets_by_properties(nodearray, vm_size, placement_group, colocated=True), 
+            key=lambda bucket: len(bucket.nodes), reverse=True
+        )
+                
+        nodes = sum([list(bucket.nodes) for bucket in candidateBuckets], [])
+        
         return nodes
-    
+
     @apitrace
     def allocate(
         self,
@@ -715,6 +730,15 @@ class NodeManager:
     def get_new_nodes(self) -> List[Node]:
         return self.new_nodes
 
+    def get_buckets_by_properties(self, nodearray, vm_size, placement_group, colocated=True):
+        return [ 
+            bucket for bucket in self.get_buckets() 
+            if bucket.nodearray == nodearray 
+            and bucket.vm_size == vm_size 
+            and (placement_group is None or bucket.placement_group == placement_group)
+            and (not colocated or bucket.placement_group is not None)
+        ]
+                
     def get_buckets(self) -> List[NodeBucket]:
         return [x for x in self.__node_buckets if x.valid]
 

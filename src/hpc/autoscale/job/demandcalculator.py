@@ -191,8 +191,9 @@ class DemandCalculator:
             newNodes = self.node_mgr.allocate_fixed_demand(
                 fixed_demand_request['nodearray'], 
                 fixed_demand_request['vm_size'], 
-                fixed_demand_request['placement_group'], 
-                fixed_demand_request['min_nodes']
+                fixed_demand_request.get('placement_group', None), 
+                fixed_demand_request['min_nodes'],
+                colocated=fixed_demand_request.get('colocated', True)
                 )
             for node, _ in newNodes:
                 self.__scheduler_nodes_queue.push(node)
@@ -265,17 +266,21 @@ class DemandCalculator:
         fixed_demand_config = config.get("fixed_demand", [])
 
         for fixed_demand_request in fixed_demand_config:
+            nodearray = fixed_demand_request['nodearray']
+            vm_size = fixed_demand_request['vm_size']
+            placement_group = fixed_demand_request.get('placement_group', None)
             current_nodes_in_bucket = self.node_mgr.get_nodes_in_bucket(
-                fixed_demand_request['nodearray'],
-                fixed_demand_request['vm_size'],
-                fixed_demand_request['placement_group']
+                nodearray,
+                vm_size,
+                placement_group,
+                colocated = fixed_demand_request.get('colocated', True)               
             )
             target_nodes_to_deallocate = [
                 node for node in unmatched_nodes
-                if node.nodearray == fixed_demand_request['nodearray'] and
-                node.vm_size == fixed_demand_request['vm_size'] and
-                node.placement_group == fixed_demand_request['placement_group'] 
-                ] 
+                if node.nodearray == nodearray and
+                node.vm_size == vm_size and
+                (placement_group is None or node.placement_group == placement_group)
+            ] 
             logging.debug(f"Plan to deallocate {len(target_nodes_to_deallocate)} nodes")
             logging.debug(f"Current nodes {len(current_nodes_in_bucket)} in bucket")
             while len(current_nodes_in_bucket) - len(target_nodes_to_deallocate) < fixed_demand_request['min_nodes'] and target_nodes_to_deallocate:
